@@ -59,18 +59,18 @@ fun AppNavGraph(navController: NavHostController) {
         }
 
         composable(Screen.AdminHome.route) { backStackEntry ->
-            val capturedPhotoPath = backStackEntry.savedStateHandle.get<String>("captured_photo_path")
+            val capturedData = backStackEntry.savedStateHandle.remove<Pair<String, String>>("captured_photo_slot_path")
             AdminHomeScreen(
-                capturedPhotoPath = capturedPhotoPath,
-                onOpenTestCamera = {
-                    navController.navigate(Screen.Camera.route)
+                capturedPhotoData = capturedData,
+                onOpenTestCamera = { slot ->
+                    navController.navigate(Screen.Camera.createRoute(slot))
                 },
                 onStaffClick = { staffId ->
                     navController.navigate(Screen.StaffProfile.createRoute(staffId))
                 },
                 onLogout = {
                     navController.navigate(Screen.Login.route) {
-                        popUpTo(Screen.AdminHome.route) { inclusive = true }
+                        popUpTo(Screen.Login.route) { inclusive = true }
                     }
                 }
             )
@@ -81,20 +81,29 @@ fun AppNavGraph(navController: NavHostController) {
             arguments = listOf(navArgument("staffId") { type = NavType.LongType })
         ) { backStackEntry ->
             val staffId = backStackEntry.arguments?.getLong("staffId") ?: 0L
+            val capturedData = backStackEntry.savedStateHandle.remove<Pair<String, String>>("captured_photo_slot_path")
             StaffProfileScreen(
                 staffId = staffId,
+                capturedPhotoData = capturedData,
+                onOpenCamera = { slot ->
+                    navController.navigate(Screen.Camera.createRoute(slot))
+                },
                 onNavigateBack = {
                     navController.popBackStack()
                 }
             )
         }
 
-        composable(Screen.Camera.route) {
+        composable(
+            route = Screen.Camera.route,
+            arguments = listOf(navArgument("slot") { defaultValue = "A" })
+        ) { backStackEntry ->
+            val slot = backStackEntry.arguments?.getString("slot") ?: "A"
             CameraScreen(
                 onPhotoCaptured = { photoPath ->
                     navController.previousBackStackEntry
                         ?.savedStateHandle
-                        ?.set("captured_photo_path", photoPath)
+                        ?.set("captured_photo_slot_path", Pair(slot, photoPath))
                     navController.popBackStack()
                 },
                 onNavigateBack = {

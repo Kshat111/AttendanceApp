@@ -40,9 +40,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -53,13 +50,14 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import coil3.compose.AsyncImage
 import com.example.myapplication.data.model.Staff
 import com.example.myapplication.face.FaceDetectionResult
-import com.example.myapplication.face.FaceDetectorManager
+import com.example.myapplication.face.FaceEmbeddingManager
+import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AdminHomeScreen(
-    capturedPhotoPath: String? = null,
-    onOpenTestCamera: () -> Unit,
+    capturedPhotoData: Pair<String, String>? = null,
+    onOpenTestCamera: (String) -> Unit,
     onStaffClick: (Long) -> Unit,
     onLogout: () -> Unit,
     viewModel: AdminHomeViewModel = viewModel()
@@ -68,16 +66,11 @@ fun AdminHomeScreen(
     val userName by viewModel.userName.collectAsState()
     val staffList by viewModel.staffList.collectAsState()
     val addStaffUiState by viewModel.addStaffUiState.collectAsState()
+    val testUiState by viewModel.embeddingTestUiState.collectAsState()
 
-    val faceDetectorManager = remember { FaceDetectorManager() }
-    var faceDetectionResult by remember(capturedPhotoPath) { mutableStateOf<FaceDetectionResult?>(null) }
-    var isProcessingFace by remember(capturedPhotoPath) { mutableStateOf(false) }
-
-    LaunchedEffect(capturedPhotoPath) {
-        if (!capturedPhotoPath.isNullOrEmpty()) {
-            isProcessingFace = true
-            faceDetectionResult = faceDetectorManager.processPhoto(context, capturedPhotoPath)
-            isProcessingFace = false
+    LaunchedEffect(capturedPhotoData) {
+        if (capturedPhotoData != null) {
+            viewModel.processCapturedPhoto(context, capturedPhotoData)
         }
     }
 
@@ -111,144 +104,227 @@ fun AdminHomeScreen(
             }
         }
     ) { innerPadding ->
-        Column(
+        LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding)
-                .padding(horizontal = 16.dp, vertical = 12.dp)
+                .padding(horizontal = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            Card(
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.secondaryContainer
-                ),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(bottom = 12.dp)
-            ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(16.dp),
-                    verticalAlignment = Alignment.CenterVertically
+            // Welcome Header Item
+            item {
+                Spacer(modifier = Modifier.height(4.dp))
+                Card(
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.secondaryContainer
+                    ),
+                    modifier = Modifier.fillMaxWidth()
                 ) {
-                    Icon(
-                        imageVector = Icons.Default.Person,
-                        contentDescription = null,
-                        modifier = Modifier.padding(end = 12.dp)
-                    )
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = "Welcome, ${userName ?: "Administrator"}",
-                            style = MaterialTheme.typography.titleMedium
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Person,
+                            contentDescription = null,
+                            modifier = Modifier.padding(end = 12.dp)
                         )
-                        Text(
-                            text = "Role: Admin",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSecondaryContainer
-                        )
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "Welcome, ${userName ?: "Administrator"}",
+                                style = MaterialTheme.typography.titleMedium
+                            )
+                            Text(
+                                text = "Role: Admin",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSecondaryContainer
+                            )
+                        }
                     }
                 }
             }
 
-            // Camera & Face Detection Test Module
-            Card(
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceVariant
-                ),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(bottom = 16.dp)
-            ) {
-                Column(
-                    modifier = Modifier.padding(12.dp)
+            // Face Embedding & Cosine Similarity Test Card
+            item {
+                Card(
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant
+                    ),
+                    modifier = Modifier.fillMaxWidth()
                 ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
+                    Column(
+                        modifier = Modifier.padding(12.dp)
                     ) {
-                        Text(
-                            text = "Camera & Face Detection Test",
-                            style = MaterialTheme.typography.labelLarge
-                        )
-                        Button(
-                            onClick = onOpenTestCamera
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Text("Test Camera")
-                        }
-                    }
+                            Text(
+                                text = "Face Embedding & Similarity Test",
+                                style = MaterialTheme.typography.titleSmall
+                            )
 
-                    if (isProcessingFace) {
-                        Spacer(modifier = Modifier.height(12.dp))
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            CircularProgressIndicator(modifier = Modifier.size(20.dp))
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text("Detecting and cropping face...", style = MaterialTheme.typography.bodySmall)
+                            if (testUiState.resultA != null || testUiState.resultB != null) {
+                                TextButton(onClick = viewModel::resetTest) {
+                                    Text("Reset")
+                                }
+                            }
                         }
-                    } else if (faceDetectionResult != null) {
-                        Spacer(modifier = Modifier.height(12.dp))
-                        when (val result = faceDetectionResult!!) {
-                            is FaceDetectionResult.Success -> {
-                                Card(
-                                    colors = CardDefaults.cardColors(
-                                        containerColor = MaterialTheme.colorScheme.primaryContainer
-                                    ),
-                                    modifier = Modifier.fillMaxWidth()
+
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            // Slot A Card
+                            Card(
+                                modifier = Modifier.weight(1f),
+                                colors = CardDefaults.cardColors(
+                                    containerColor = MaterialTheme.colorScheme.background
+                                )
+                            ) {
+                                Column(
+                                    modifier = Modifier.padding(8.dp),
+                                    horizontalAlignment = Alignment.CenterHorizontally
                                 ) {
-                                    Column(
-                                        modifier = Modifier.padding(12.dp),
-                                        horizontalAlignment = Alignment.CenterHorizontally
+                                    Button(
+                                        onClick = { onOpenTestCamera("A") },
+                                        modifier = Modifier.fillMaxWidth()
                                     ) {
-                                        Row(verticalAlignment = Alignment.CenterVertically) {
-                                            Icon(
-                                                imageVector = Icons.Default.CheckCircle,
-                                                contentDescription = null,
-                                                tint = MaterialTheme.colorScheme.primary
+                                        Text("Photo A")
+                                    }
+
+                                    if (testUiState.isProcessingA) {
+                                        Spacer(modifier = Modifier.height(8.dp))
+                                        CircularProgressIndicator(modifier = Modifier.size(24.dp))
+                                    } else when (val resA = testUiState.resultA) {
+                                        is FaceDetectionResult.Success -> {
+                                            Spacer(modifier = Modifier.height(8.dp))
+                                            AsyncImage(
+                                                model = resA.croppedFacePath,
+                                                contentDescription = "Face A",
+                                                contentScale = ContentScale.Crop,
+                                                modifier = Modifier
+                                                    .size(72.dp)
+                                                    .clip(CircleShape)
                                             )
-                                            Spacer(modifier = Modifier.width(8.dp))
+                                            Spacer(modifier = Modifier.height(4.dp))
                                             Text(
-                                                text = "Face Detected & Cropped",
-                                                style = MaterialTheme.typography.titleSmall,
-                                                color = MaterialTheme.colorScheme.onPrimaryContainer
+                                                text = "Dim: ${resA.faceEmbedding.size}",
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = MaterialTheme.colorScheme.primary
                                             )
                                         }
-
-                                        Spacer(modifier = Modifier.height(8.dp))
-
-                                        AsyncImage(
-                                            model = result.croppedFacePath,
-                                            contentDescription = "Cropped Face",
-                                            contentScale = ContentScale.Crop,
-                                            modifier = Modifier
-                                                .size(140.dp)
-                                                .clip(CircleShape)
-                                        )
+                                        is FaceDetectionResult.Failure -> {
+                                            Spacer(modifier = Modifier.height(8.dp))
+                                            Text(
+                                                text = resA.reason,
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = MaterialTheme.colorScheme.error
+                                            )
+                                        }
+                                        null -> {}
                                     }
                                 }
                             }
-                            is FaceDetectionResult.Failure -> {
-                                Card(
-                                    colors = CardDefaults.cardColors(
-                                        containerColor = MaterialTheme.colorScheme.errorContainer
-                                    ),
-                                    modifier = Modifier.fillMaxWidth()
+
+                            // Slot B Card
+                            Card(
+                                modifier = Modifier.weight(1f),
+                                colors = CardDefaults.cardColors(
+                                    containerColor = MaterialTheme.colorScheme.background
+                                )
+                            ) {
+                                Column(
+                                    modifier = Modifier.padding(8.dp),
+                                    horizontalAlignment = Alignment.CenterHorizontally
                                 ) {
-                                    Row(
-                                        modifier = Modifier.padding(12.dp),
-                                        verticalAlignment = Alignment.CenterVertically
+                                    Button(
+                                        onClick = { onOpenTestCamera("B") },
+                                        modifier = Modifier.fillMaxWidth()
                                     ) {
+                                        Text("Photo B")
+                                    }
+
+                                    if (testUiState.isProcessingB) {
+                                        Spacer(modifier = Modifier.height(8.dp))
+                                        CircularProgressIndicator(modifier = Modifier.size(24.dp))
+                                    } else when (val resB = testUiState.resultB) {
+                                        is FaceDetectionResult.Success -> {
+                                            Spacer(modifier = Modifier.height(8.dp))
+                                            AsyncImage(
+                                                model = resB.croppedFacePath,
+                                                contentDescription = "Face B",
+                                                contentScale = ContentScale.Crop,
+                                                modifier = Modifier
+                                                    .size(72.dp)
+                                                    .clip(CircleShape)
+                                            )
+                                            Spacer(modifier = Modifier.height(4.dp))
+                                            Text(
+                                                text = "Dim: ${resB.faceEmbedding.size}",
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = MaterialTheme.colorScheme.primary
+                                            )
+                                        }
+                                        is FaceDetectionResult.Failure -> {
+                                            Spacer(modifier = Modifier.height(8.dp))
+                                            Text(
+                                                text = resB.reason,
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = MaterialTheme.colorScheme.error
+                                            )
+                                        }
+                                        null -> {}
+                                    }
+                                }
+                            }
+                        }
+
+                        // Similarity Result Section
+                        if (testUiState.resultA is FaceDetectionResult.Success && testUiState.resultB is FaceDetectionResult.Success) {
+                            val embeddingA = (testUiState.resultA as FaceDetectionResult.Success).faceEmbedding
+                            val embeddingB = (testUiState.resultB as FaceDetectionResult.Success).faceEmbedding
+                            val similarity = FaceEmbeddingManager.cosineSimilarity(embeddingA, embeddingB)
+                            val isMatch = similarity >= 0.65f
+
+                            Spacer(modifier = Modifier.height(12.dp))
+
+                            Card(
+                                colors = CardDefaults.cardColors(
+                                    containerColor = if (isMatch) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.errorContainer
+                                ),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Column(
+                                    modifier = Modifier.padding(12.dp),
+                                    horizontalAlignment = Alignment.CenterHorizontally
+                                ) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
                                         Icon(
-                                            imageVector = Icons.Default.Warning,
+                                            imageVector = if (isMatch) Icons.Default.CheckCircle else Icons.Default.Warning,
                                             contentDescription = null,
-                                            tint = MaterialTheme.colorScheme.error
+                                            tint = if (isMatch) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error
                                         )
                                         Spacer(modifier = Modifier.width(8.dp))
                                         Text(
-                                            text = result.reason,
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = MaterialTheme.colorScheme.onErrorContainer
+                                            text = if (isMatch) "MATCH (Same Person)" else "NO MATCH (Different Persons)",
+                                            style = MaterialTheme.typography.titleMedium,
+                                            color = if (isMatch) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onErrorContainer
                                         )
                                     }
+
+                                    Spacer(modifier = Modifier.height(4.dp))
+
+                                    Text(
+                                        text = String.format(Locale.US, "Cosine Similarity: %.4f", similarity),
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = if (isMatch) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onErrorContainer
+                                    )
                                 }
                             }
                         }
@@ -256,50 +332,54 @@ fun AdminHomeScreen(
                 }
             }
 
-            Text(
-                text = "Staff Members (${staffList.size})",
-                style = MaterialTheme.typography.titleMedium,
-                modifier = Modifier.padding(bottom = 8.dp)
-            )
+            // Staff Header Item
+            item {
+                Text(
+                    text = "Staff Members (${staffList.size})",
+                    style = MaterialTheme.typography.titleMedium
+                )
+            }
 
+            // Staff List / Empty State Items
             if (staffList.isEmpty()) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(32.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Column(
-                        horizontalAlignment = Alignment.CenterHorizontally
+                item {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 24.dp),
+                        contentAlignment = Alignment.Center
                     ) {
-                        Text(
-                            text = "No staff members found",
-                            style = MaterialTheme.typography.titleSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Text(
-                            text = "Tap '+ Add Staff' to enroll a new staff member.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.outline
-                        )
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Text(
+                                text = "No staff members found",
+                                style = MaterialTheme.typography.titleSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = "Tap '+ Add Staff' to enroll a new staff member.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.outline
+                            )
+                        }
                     }
                 }
             } else {
-                LazyColumn(
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                    modifier = Modifier.fillMaxSize()
-                ) {
-                    items(
-                        items = staffList,
-                        key = { it.id }
-                    ) { staff ->
-                        StaffItemCard(
-                            staff = staff,
-                            onClick = { onStaffClick(staff.id) }
-                        )
-                    }
+                items(
+                    items = staffList,
+                    key = { it.id }
+                ) { staff ->
+                    StaffItemCard(
+                        staff = staff,
+                        onClick = { onStaffClick(staff.id) }
+                    )
                 }
+            }
+
+            item {
+                Spacer(modifier = Modifier.height(16.dp))
             }
         }
     }

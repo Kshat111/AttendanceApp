@@ -26,8 +26,27 @@ private const val TAG = "FaceDetectorManager"
 sealed interface FaceDetectionResult {
     data class Success(
         val croppedFaceBitmap: Bitmap,
-        val croppedFacePath: String
-    ) : FaceDetectionResult
+        val croppedFacePath: String,
+        val faceEmbedding: FloatArray
+    ) : FaceDetectionResult {
+        override fun equals(other: Any?): Boolean {
+            if (this === other) return true
+            if (javaClass != other?.javaClass) return false
+
+            other as Success
+
+            if (croppedFacePath != other.croppedFacePath) return false
+            if (!faceEmbedding.contentEquals(other.faceEmbedding)) return false
+
+            return true
+        }
+
+        override fun hashCode(): Int {
+            var result = croppedFacePath.hashCode()
+            result = 31 * result + faceEmbedding.contentHashCode()
+            return result
+        }
+    }
 
     data class Failure(val reason: String) : FaceDetectionResult
 }
@@ -44,6 +63,8 @@ class FaceDetectorManager {
     private val detector: FaceDetector by lazy {
         FaceDetection.getClient(detectorOptions)
     }
+
+    private var embeddingManager: FaceEmbeddingManager? = null
 
     suspend fun processPhoto(context: Context, imagePath: String): FaceDetectionResult = withContext(Dispatchers.IO) {
         val bitmap = loadAndRotateImage(imagePath)
@@ -88,11 +109,14 @@ class FaceDetectorManager {
             return@withContext FaceDetectionResult.Failure("Face is too far away or too small. Please move closer to the camera.")
         }
 
-        // Crop face from rotated upright bitmap
-        val left = boundingBox.left.coerceIn(0, bitmap.width - 1)
-        val top = boundingBox.top.coerceIn(0, bitmap.height - 1)
-        val right = boundingBox.right.coerceIn(left + 1, bitmap.width)
-        val bottom = boundingBox.bottom.coerceIn(top + 1, bitmap.height)
+        // Apply 15% padding around the face bounding box before cropping
+        val paddingX = (faceWidth * 0.15f).toInt()
+        val paddingY = (faceHeight * 0.15f).toInt()
+
+        val left = (boundingBox.left - paddingX).coerceIn(0, bitmap.width - 1)
+        val top = (boundingBox.top - paddingY).coerceIn(0, bitmap.height - 1)
+        val right = (boundingBox.right + paddingX).coerceIn(left + 1, bitmap.width)
+        val bottom = (boundingBox.bottom + paddingY).coerceIn(top + 1, bitmap.height)
 
         val cropWidth = right - left
         val cropHeight = bottom - top
@@ -114,11 +138,24 @@ class FaceDetectorManager {
             return@withContext FaceDetectionResult.Failure("Failed to save cropped face image.")
         }
 
-        Log.d(TAG, "Face successfully cropped and saved at: ${croppedFile.absolutePath} (size=${croppedFile.length()} bytes)")
+        // Initialize TFLite FaceEmbeddingManager if needed
+        val manager = embeddingManager ?: synchronized(this) {
+            embeddingManager ?: FaceEmbeddingManager(context).also { embeddingManager = it }
+        }
+
+        val faceEmbedding = try {
+            manager.extractEmbedding(croppedBitmap)
+        } catch (e: Exception) {
+            Log.e(TAG, "Embedding extraction failed", e)
+            return@withContext FaceDetectionResult.Failure("Failed to extract face embedding: ${e.localizedMessage}")
+        }
+
+        Log.d(TAG, "Face successfully cropped (with 15% padding) and embedded (dim=${faceEmbedding.size}) at: ${croppedFile.absolutePath}")
 
         FaceDetectionResult.Success(
             croppedFaceBitmap = croppedBitmap,
-            croppedFacePath = croppedFile.absolutePath
+            croppedFacePath = croppedFile.absolutePath,
+            faceEmbedding = faceEmbedding
         )
     }
 

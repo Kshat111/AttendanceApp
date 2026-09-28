@@ -10,10 +10,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.navigation.NavHostController
+import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
+import androidx.navigation.navArgument
 import com.example.myapplication.data.preferences.UserPreferencesRepository
 import com.example.myapplication.ui.admin.AdminHomeScreen
+import com.example.myapplication.ui.admin.StaffProfileScreen
+import com.example.myapplication.ui.camera.CameraScreen
 import com.example.myapplication.ui.login.LoginScreen
 import com.example.myapplication.ui.staff.StaffHomeScreen
 
@@ -54,12 +58,47 @@ fun AppNavGraph(navController: NavHostController) {
             )
         }
 
-        composable(Screen.AdminHome.route) {
+        composable(Screen.AdminHome.route) { backStackEntry ->
+            val capturedPhotoPath = backStackEntry.savedStateHandle.get<String>("captured_photo_path")
             AdminHomeScreen(
+                capturedPhotoPath = capturedPhotoPath,
+                onOpenTestCamera = {
+                    navController.navigate(Screen.Camera.route)
+                },
+                onStaffClick = { staffId ->
+                    navController.navigate(Screen.StaffProfile.createRoute(staffId))
+                },
                 onLogout = {
                     navController.navigate(Screen.Login.route) {
                         popUpTo(Screen.AdminHome.route) { inclusive = true }
                     }
+                }
+            )
+        }
+
+        composable(
+            route = Screen.StaffProfile.route,
+            arguments = listOf(navArgument("staffId") { type = NavType.LongType })
+        ) { backStackEntry ->
+            val staffId = backStackEntry.arguments?.getLong("staffId") ?: 0L
+            StaffProfileScreen(
+                staffId = staffId,
+                onNavigateBack = {
+                    navController.popBackStack()
+                }
+            )
+        }
+
+        composable(Screen.Camera.route) {
+            CameraScreen(
+                onPhotoCaptured = { photoPath ->
+                    navController.previousBackStackEntry
+                        ?.savedStateHandle
+                        ?.set("captured_photo_path", photoPath)
+                    navController.popBackStack()
+                },
+                onNavigateBack = {
+                    navController.popBackStack()
                 }
             )
         }

@@ -4,7 +4,6 @@ import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.myapplication.AttendanceApplication
-import com.example.myapplication.data.preferences.UserPreferencesRepository
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -54,18 +53,10 @@ class LoginViewModel(application: Application) : AndroidViewModel(application) {
                 return@launch
             }
 
-            // Staff login check by Employee ID
+            // Staff login check: must match a registered employeeId in the Staff table with password "staff123"
             val staffMember = attendanceRepository.getStaffByEmployeeId(inputUsername)
-            if (staffMember != null && (password == "staff123")) {
+            if (staffMember != null && password == "staff123") {
                 userPreferencesRepository.saveUserSession(role = "STAFF", username = staffMember.employeeId)
-                _uiState.value = _uiState.value.copy(isLoading = false)
-                onSuccess("STAFF")
-                return@launch
-            }
-
-            // Fallback for generic "staff" demo account if no staff exists with ID "staff"
-            if (inputUsername.equals("staff", ignoreCase = true) && password == "staff123") {
-                userPreferencesRepository.saveUserSession(role = "STAFF", username = "staff")
                 _uiState.value = _uiState.value.copy(isLoading = false)
                 onSuccess("STAFF")
                 return@launch

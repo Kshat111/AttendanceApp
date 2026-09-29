@@ -1,4 +1,4 @@
-# SmartAttendance — Android Hiring Assignment
+# SmartAttendance
 
 A simple Android attendance app with two user roles (Admin and Staff), built around
 selfie-based face recognition. Staff can only mark attendance if their live selfie

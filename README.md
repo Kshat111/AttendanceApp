@@ -102,7 +102,7 @@ stable key for the relationship — and it enables a proper `CASCADE` delete
 ### Steps
 1. Clone the repository:
    ```
-   git clone <your-repo-url>
+   git clone https://github.com/Kshat111/AttendanceApp
    ```
 2. Open the project in Android Studio and let Gradle sync (dependencies are
    managed via the version catalog in `gradle/libs.versions.toml`).

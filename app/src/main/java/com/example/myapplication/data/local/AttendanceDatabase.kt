@@ -11,7 +11,7 @@ import com.example.myapplication.util.Constants
 
 @Database(
     entities = [Staff::class, Attendance::class],
-    version = 2,
+    version = 4,
     exportSchema = false
 )
 @TypeConverters(Converters::class)
@@ -30,7 +30,9 @@ abstract class AttendanceDatabase : RoomDatabase() {
                     context.applicationContext,
                     AttendanceDatabase::class.java,
                     Constants.DATABASE_NAME
-                ).build()
+                )
+                    .fallbackToDestructiveMigration(dropAllTables = true)
+                    .build()
                 INSTANCE = instance
                 instance
             }

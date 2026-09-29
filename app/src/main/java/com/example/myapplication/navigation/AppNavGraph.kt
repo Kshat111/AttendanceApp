@@ -58,13 +58,8 @@ fun AppNavGraph(navController: NavHostController) {
             )
         }
 
-        composable(Screen.AdminHome.route) { backStackEntry ->
-            val capturedData = backStackEntry.savedStateHandle.remove<Pair<String, String>>("captured_photo_slot_path")
+        composable(Screen.AdminHome.route) {
             AdminHomeScreen(
-                capturedPhotoData = capturedData,
-                onOpenTestCamera = { slot ->
-                    navController.navigate(Screen.Camera.createRoute(slot))
-                },
                 onStaffClick = { staffId ->
                     navController.navigate(Screen.StaffProfile.createRoute(staffId))
                 },

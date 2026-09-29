@@ -3,6 +3,7 @@ package com.example.myapplication.ui.login
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.myapplication.AttendanceApplication
 import com.example.myapplication.data.preferences.UserPreferencesRepository
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -18,7 +19,9 @@ data class LoginUiState(
 
 class LoginViewModel(application: Application) : AndroidViewModel(application) {
 
-    private val userPreferencesRepository = UserPreferencesRepository(application)
+    private val app = application as AttendanceApplication
+    private val userPreferencesRepository = app.container.userPreferencesRepository
+    private val attendanceRepository = app.container.attendanceRepository
 
     private val _uiState = MutableStateFlow(LoginUiState())
     val uiState: StateFlow<LoginUiState> = _uiState.asStateFlow()
@@ -32,10 +35,10 @@ class LoginViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun login(onSuccess: (String) -> Unit) {
-        val username = _uiState.value.usernameText.trim()
+        val inputUsername = _uiState.value.usernameText.trim()
         val password = _uiState.value.passwordText.trim()
 
-        if (username.isEmpty() || password.isEmpty()) {
+        if (inputUsername.isEmpty() || password.isEmpty()) {
             _uiState.value = _uiState.value.copy(errorMessage = "Username and password cannot be empty.")
             return
         }
@@ -43,24 +46,35 @@ class LoginViewModel(application: Application) : AndroidViewModel(application) {
         _uiState.value = _uiState.value.copy(isLoading = true, errorMessage = null)
 
         viewModelScope.launch {
-            when {
-                username.equals("admin", ignoreCase = true) && password == "admin123" -> {
-                    userPreferencesRepository.saveUserSession(role = "ADMIN", username = username)
-                    _uiState.value = _uiState.value.copy(isLoading = false)
-                    onSuccess("ADMIN")
-                }
-                username.equals("staff", ignoreCase = true) && password == "staff123" -> {
-                    userPreferencesRepository.saveUserSession(role = "STAFF", username = username)
-                    _uiState.value = _uiState.value.copy(isLoading = false)
-                    onSuccess("STAFF")
-                }
-                else -> {
-                    _uiState.value = _uiState.value.copy(
-                        isLoading = false,
-                        errorMessage = "Invalid credentials. Hint: admin/admin123 or staff/staff123"
-                    )
-                }
+            // Admin login check
+            if (inputUsername.equals("admin", ignoreCase = true) && password == "admin123") {
+                userPreferencesRepository.saveUserSession(role = "ADMIN", username = "admin")
+                _uiState.value = _uiState.value.copy(isLoading = false)
+                onSuccess("ADMIN")
+                return@launch
             }
+
+            // Staff login check by Employee ID
+            val staffMember = attendanceRepository.getStaffByEmployeeId(inputUsername)
+            if (staffMember != null && (password == "staff123")) {
+                userPreferencesRepository.saveUserSession(role = "STAFF", username = staffMember.employeeId)
+                _uiState.value = _uiState.value.copy(isLoading = false)
+                onSuccess("STAFF")
+                return@launch
+            }
+
+            // Fallback for generic "staff" demo account if no staff exists with ID "staff"
+            if (inputUsername.equals("staff", ignoreCase = true) && password == "staff123") {
+                userPreferencesRepository.saveUserSession(role = "STAFF", username = "staff")
+                _uiState.value = _uiState.value.copy(isLoading = false)
+                onSuccess("STAFF")
+                return@launch
+            }
+
+            _uiState.value = _uiState.value.copy(
+                isLoading = false,
+                errorMessage = "Invalid credentials or Employee ID not found.\nDemo: Admin (admin/admin123) or Staff (<Employee ID>/staff123)."
+            )
         }
     }
 }

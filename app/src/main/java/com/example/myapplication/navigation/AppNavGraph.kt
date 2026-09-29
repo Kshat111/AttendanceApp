@@ -112,8 +112,13 @@ fun AppNavGraph(navController: NavHostController) {
             )
         }
 
-        composable(Screen.StaffHome.route) {
+        composable(Screen.StaffHome.route) { backStackEntry ->
+            val capturedData = backStackEntry.savedStateHandle.remove<Pair<String, String>>("captured_photo_slot_path")
             StaffHomeScreen(
+                capturedPhotoData = capturedData,
+                onOpenAttendanceCamera = { slot ->
+                    navController.navigate(Screen.Camera.createRoute(slot))
+                },
                 onLogout = {
                     navController.navigate(Screen.Login.route) {
                         popUpTo(Screen.StaffHome.route) { inclusive = true }

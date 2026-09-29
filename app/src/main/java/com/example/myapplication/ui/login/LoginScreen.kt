@@ -66,7 +66,7 @@ fun LoginScreen(
                     OutlinedTextField(
                         value = uiState.usernameText,
                         onValueChange = viewModel::onUsernameChange,
-                        label = { Text("Username") },
+                        label = { Text("Employee ID / Username") },
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth()
                     )
@@ -113,7 +113,7 @@ fun LoginScreen(
 
             Spacer(modifier = Modifier.height(24.dp))
             Text(
-                text = "Demo Accounts:\nAdmin: admin / admin123\nStaff: staff / staff123",
+                text = "Demo Credentials:\nAdmin: admin / admin123\nStaff: <Employee ID> / staff123",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.outline
             )

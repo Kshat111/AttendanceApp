@@ -1,5 +1,7 @@
 package com.example.myapplication.ui.admin
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -13,13 +15,17 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.AccountCircle
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Face
+import androidx.compose.material.icons.filled.LocationOn
+import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -43,14 +49,24 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil3.compose.AsyncImage
+import com.example.myapplication.data.model.Attendance
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -63,10 +79,13 @@ fun StaffProfileScreen(
 ) {
     val context = LocalContext.current
     val staff by viewModel.staff.collectAsState()
+    val attendanceHistory by viewModel.attendanceHistory.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
     val editUiState by viewModel.editUiState.collectAsState()
     val deleteUiState by viewModel.deleteUiState.collectAsState()
     val enrollmentUiState by viewModel.enrollmentUiState.collectAsState()
+
+    var selectedAttendanceForDetail by remember { mutableStateOf<Attendance?>(null) }
 
     LaunchedEffect(staffId) {
         viewModel.loadStaff(staffId)
@@ -312,8 +331,64 @@ fun StaffProfileScreen(
                         }
                     }
                 }
+
+                // Attendance History Section
+                Spacer(modifier = Modifier.height(24.dp))
+
+                Text(
+                    text = "Attendance History (${attendanceHistory.size})",
+                    style = MaterialTheme.typography.titleMedium,
+                    modifier = Modifier.align(Alignment.Start)
+                )
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                if (attendanceHistory.isEmpty()) {
+                    OutlinedCard(
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(24.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Text(
+                                text = "No attendance records yet",
+                                style = MaterialTheme.typography.titleSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = "Attendance records for ${currentStaff.name} will appear here once marked.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.outline
+                            )
+                        }
+                    }
+                } else {
+                    Column(
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        attendanceHistory.forEach { attendance ->
+                            AttendanceHistoryItemCard(
+                                attendance = attendance,
+                                onClick = { selectedAttendanceForDetail = attendance }
+                            )
+                        }
+                    }
+                }
             }
         }
+    }
+
+    // Full-screen Selfie Detail View for Admin
+    if (selectedAttendanceForDetail != null) {
+        AttendanceDetailDialog(
+            attendance = selectedAttendanceForDetail!!,
+            onDismiss = { selectedAttendanceForDetail = null }
+        )
     }
 
     if (enrollmentUiState.showReenrollConfirmDialog) {
@@ -345,6 +420,208 @@ fun StaffProfileScreen(
                 viewModel.deleteStaff(onDeleted = onNavigateBack)
             }
         )
+    }
+}
+
+@Composable
+fun AttendanceHistoryItemCard(
+    attendance: Attendance,
+    onClick: () -> Unit = {}
+) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surface
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            // Selfie Thumbnail
+            if (!attendance.selfiePath.isNullOrEmpty()) {
+                AsyncImage(
+                    model = attendance.selfiePath,
+                    contentDescription = "Attendance Selfie",
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier
+                        .size(56.dp)
+                        .clip(CircleShape)
+                )
+            } else {
+                Box(
+                    modifier = Modifier
+                        .size(56.dp)
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.surfaceVariant),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Person,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.width(16.dp))
+
+            Column(modifier = Modifier.weight(1f)) {
+                // Formatted timestamp: "10:45 AM, 28 Sep 2026"
+                Text(
+                    text = formatTimestamp(attendance.timestamp),
+                    style = MaterialTheme.typography.titleSmall
+                )
+
+                Spacer(modifier = Modifier.height(4.dp))
+
+                // Location
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = Icons.Default.LocationOn,
+                        contentDescription = null,
+                        modifier = Modifier.size(14.dp),
+                        tint = if (attendance.latitude != null && attendance.longitude != null) {
+                            MaterialTheme.colorScheme.primary
+                        } else {
+                            MaterialTheme.colorScheme.outline
+                        }
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    if (attendance.latitude != null && attendance.longitude != null) {
+                        Text(
+                            text = String.format(Locale.US, "GPS: %.4f, %.4f", attendance.latitude, attendance.longitude),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    } else {
+                        Text(
+                            text = "Location unavailable",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.outline
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun AttendanceDetailDialog(
+    attendance: Attendance,
+    onDismiss: () -> Unit
+) {
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false)
+    ) {
+        Scaffold(
+            topBar = {
+                TopAppBar(
+                    title = { Text("Attendance Detail") },
+                    navigationIcon = {
+                        IconButton(onClick = onDismiss) {
+                            Icon(
+                                imageVector = Icons.Default.Close,
+                                contentDescription = "Close"
+                            )
+                        }
+                    },
+                    colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = Color.Black,
+                        titleContentColor = Color.White,
+                        navigationIconContentColor = Color.White
+                    )
+                )
+            },
+            containerColor = Color.Black
+        ) { innerPadding ->
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(innerPadding)
+                    .padding(16.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center
+            ) {
+                // Full Selfie Image
+                if (!attendance.selfiePath.isNullOrEmpty()) {
+                    AsyncImage(
+                        model = attendance.selfiePath,
+                        contentDescription = "Full Attendance Selfie",
+                        contentScale = ContentScale.Fit,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .weight(1f)
+                            .clip(RoundedCornerShape(12.dp))
+                    )
+                } else {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .weight(1f)
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(MaterialTheme.colorScheme.surfaceVariant),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Person,
+                            contentDescription = null,
+                            modifier = Modifier.size(96.dp),
+                            tint = Color.White
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(20.dp))
+
+                // Timestamp below selfie
+                Text(
+                    text = formatTimestamp(attendance.timestamp),
+                    style = MaterialTheme.typography.titleLarge,
+                    color = Color.White
+                )
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                // Location below timestamp
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = Icons.Default.LocationOn,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp),
+                        tint = if (attendance.latitude != null && attendance.longitude != null) {
+                            MaterialTheme.colorScheme.primary
+                        } else {
+                            Color.Gray
+                        }
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    if (attendance.latitude != null && attendance.longitude != null) {
+                        Text(
+                            text = String.format(Locale.US, "GPS: %.4f, %.4f", attendance.latitude, attendance.longitude),
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = Color.White
+                        )
+                    } else {
+                        Text(
+                            text = "Location unavailable",
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = Color.Gray
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(20.dp))
+            }
+        }
     }
 }
 
@@ -502,4 +779,9 @@ fun DeleteStaffConfirmDialog(
             }
         }
     )
+}
+
+private fun formatTimestamp(timestamp: Long): String {
+    val sdf = SimpleDateFormat("hh:mm a, dd MMM yyyy", Locale.US)
+    return sdf.format(Date(timestamp))
 }

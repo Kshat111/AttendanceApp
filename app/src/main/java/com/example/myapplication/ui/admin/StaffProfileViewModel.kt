@@ -5,13 +5,19 @@ import android.content.Context
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.myapplication.AttendanceApplication
+import com.example.myapplication.data.model.Attendance
 import com.example.myapplication.data.model.Staff
 import com.example.myapplication.face.FaceDetectionResult
 import com.example.myapplication.face.FaceDetectorManager
 import com.example.myapplication.face.FaceEmbeddingManager
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
 data class EditStaffUiState(
@@ -39,6 +45,7 @@ data class FaceEnrollmentUiState(
     val showReenrollConfirmDialog: Boolean = false
 )
 
+@OptIn(ExperimentalCoroutinesApi::class)
 class StaffProfileViewModel(application: Application) : AndroidViewModel(application) {
 
     private val app = application as AttendanceApplication
@@ -47,6 +54,18 @@ class StaffProfileViewModel(application: Application) : AndroidViewModel(applica
 
     private val _staff = MutableStateFlow<Staff?>(null)
     val staff: StateFlow<Staff?> = _staff.asStateFlow()
+
+    val attendanceHistory: StateFlow<List<Attendance>> = _staff.flatMapLatest { currentStaff ->
+        if (currentStaff != null) {
+            attendanceRepository.getAttendanceForStaff(currentStaff.id)
+        } else {
+            flowOf(emptyList())
+        }
+    }.stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.WhileSubscribed(5000),
+        initialValue = emptyList()
+    )
 
     private val _isLoading = MutableStateFlow(true)
     val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
